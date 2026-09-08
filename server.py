@@ -13,8 +13,14 @@ Endpoint: GET /gioca  ->  {"riga": 1-3, "colonna": 1-3,
                            "bob1": +-1, "bob2": +-1}
 """
 
+import base64
+import io
 import os
 import random
+
+import matplotlib
+matplotlib.use("Agg")  # backend senza interfaccia grafica, necessario su un server
+import matplotlib.pyplot as plt
 
 from flask import Flask, jsonify
 from flask_cors import CORS
@@ -27,6 +33,17 @@ app = Flask(__name__)
 CORS(app)
 
 simulatore = AerSimulator()
+
+
+def disegna_circuito_base64(qc):
+    """Disegna il circuito con matplotlib e lo restituisce come stringa
+    base64 pronta per essere usata in un tag <img src="data:image/png;...">"""
+    fig = qc.draw(output="mpl", fold=-1)
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", bbox_inches="tight", dpi=110)
+    plt.close(fig)
+    buf.seek(0)
+    return "data:image/png;base64," + base64.b64encode(buf.read()).decode("ascii")
 
 
 def gioca_una_partita():
@@ -76,6 +93,8 @@ def gioca_una_partita():
     qc.measure(q_bob1[0], c_misura[2])
     qc.measure(q_bob2[0], c_misura[3])
 
+    circuito_immagine = disegna_circuito_base64(qc)
+
     circuito = transpile(qc, simulatore)
     job = simulatore.run(circuito, shots=1)
     conteggi = job.result().get_counts()
@@ -95,6 +114,7 @@ def gioca_una_partita():
         "alice2": int(numeri[1]),
         "bob1": int(numeri[2]),
         "bob2": int(numeri[3]),
+        "circuito_png": circuito_immagine,
     }
 
 
