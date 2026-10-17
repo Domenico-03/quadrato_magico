@@ -17,6 +17,7 @@ import base64
 import io
 import os
 import random
+import secrets
 
 import matplotlib
 matplotlib.use("Agg")  # backend senza interfaccia grafica, necessario su un server
@@ -33,6 +34,11 @@ app = Flask(__name__)
 CORS(app)
 
 simulatore = AerSimulator()
+
+# Partite create con "avvia partita": memorizzate in RAM, associate a un
+# codice breve condivisibile via link, cosicche' due persone che aprono lo
+# stesso link vedano la stessa riga e colonna estratte.
+partite_salvate = {}
 
 
 def disegna_circuito_base64(qc):
@@ -121,6 +127,32 @@ def gioca_una_partita():
 @app.route("/gioca")
 def gioca():
     return jsonify(gioca_una_partita())
+
+
+@app.route("/crea_partita", methods=["GET", "POST"])
+def crea_partita():
+    """Estrae riga e colonna una sola volta e le salva sotto un codice
+    breve, cosi' chi riceve il link vede la stessa identica partita."""
+    dati = gioca_una_partita()
+    codice = secrets.token_hex(3)  # es. "a1b2c3"
+    partite_salvate[codice] = dati
+
+    risposta = dict(dati)
+    risposta["id"] = codice
+    return jsonify(risposta)
+
+
+@app.route("/partita/<codice>")
+def partita(codice):
+    """Recupera una partita gia' creata, dato il codice contenuto nel link
+    condiviso (non ne genera una nuova)."""
+    dati = partite_salvate.get(codice)
+    if dati is None:
+        return jsonify({"errore": "partita non trovata o scaduta"}), 404
+
+    risposta = dict(dati)
+    risposta["id"] = codice
+    return jsonify(risposta)
 
 
 @app.route("/")
