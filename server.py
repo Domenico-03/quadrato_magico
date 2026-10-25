@@ -23,7 +23,7 @@ import matplotlib
 matplotlib.use("Agg")  # backend senza interfaccia grafica, necessario su un server
 import matplotlib.pyplot as plt
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from qiskit import ClassicalRegister, QuantumCircuit, QuantumRegister, transpile
 from qiskit_aer import AerSimulator
@@ -134,6 +134,8 @@ def crea_partita():
     """Estrae riga e colonna una sola volta e le salva sotto un codice
     breve, cosi' chi riceve il link vede la stessa identica partita."""
     dati = gioca_una_partita()
+    dati["alice_valori"] = None
+    dati["bob_valori"] = None
     codice = secrets.token_hex(3)  # es. "a1b2c3"
     partite_salvate[codice] = dati
 
@@ -149,6 +151,31 @@ def partita(codice):
     dati = partite_salvate.get(codice)
     if dati is None:
         return jsonify({"errore": "partita non trovata o scaduta"}), 404
+
+    risposta = dict(dati)
+    risposta["id"] = codice
+    return jsonify(risposta)
+
+
+@app.route("/partita/<codice>/invia", methods=["POST"])
+def invia_valori(codice):
+    """Riceve i tre valori scritti da Alice o da Bob nella propria riga o
+    colonna e li memorizza, cosi' che l'altro giocatore possa vederli
+    quando entrambi hanno finito."""
+    dati = partite_salvate.get(codice)
+    if dati is None:
+        return jsonify({"errore": "partita non trovata o scaduta"}), 404
+
+    corpo = request.get_json(silent=True) or {}
+    ruolo = corpo.get("ruolo")
+    valori = corpo.get("valori")
+
+    if ruolo not in ("alice", "bob"):
+        return jsonify({"errore": "ruolo non valido"}), 400
+    if not isinstance(valori, list) or len(valori) != 3 or any(v not in (1, -1) for v in valori):
+        return jsonify({"errore": "valori non validi"}), 400
+
+    dati[ruolo + "_valori"] = valori
 
     risposta = dict(dati)
     risposta["id"] = codice
